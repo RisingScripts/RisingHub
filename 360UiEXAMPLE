@@ -1,0 +1,48 @@
+local UI = loadstring(game:HttpGet("https://raw.githubusercontent.com/RisingScripts/RisingHub/refs/heads/main/360Ui"))()
+
+local Win = UI:CreateWindow({
+    Title = "MY MENU",
+    Subtitle = "C H E A T S",
+    Accent = Color3.fromRGB(0, 190, 80),
+    Spark = Color3.fromRGB(120, 255, 170),
+    ToggleKey = Enum.KeyCode.RightShift,
+    ShowToggleBar = true,
+})
+
+local Main = Win:AddTab("Main", "🏠", 1)
+
+Main:AddSection("Player")
+
+Main:AddButton("Print Hello", function()
+    print("Hello!")
+end)
+
+Main:AddToggle("Fullbright", false, function(state)
+    game:GetService("Lighting").Brightness = state and 3 or 1
+end)
+
+Main:AddSlider("WalkSpeed", 16, 200, 16, function(value)
+    local char = game.Players.LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed = value end
+end)
+
+Main:AddDropdown("Camera Mode", { "Default", "First Person", "Third Person" }, "Default", function(option)
+    print("Camera:", option)
+end)
+
+local getName = Main:AddTextBox("Enter Name", "type here...", function(text)
+    print("Name set to:", text)
+end)
+
+Main:AddButton("Read Name", function()
+    print("Current name:", getName())
+end)
+
+Main:AddKeybind("Print Key", Enum.KeyCode.P, function(key)
+    print("Pressed:", key.Name)
+end)
+
+Main:AddButton("Send Notification", function()
+    Win:Notify("Hello", "This is a notification", 3)
+end)

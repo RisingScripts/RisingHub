@@ -1,0 +1,829 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local function getParent()
+    local ok, hui = pcall(function() return gethui and gethui() end)
+    if ok and hui then return hui end
+    local ok2, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok2 and cg then return cg end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local function create(class, props, children)
+    local inst = Instance.new(class)
+    for k, v in pairs(props or {}) do inst[k] = v end
+    for _, ch in ipairs(children or {}) do ch.Parent = inst end
+    return inst
+end
+
+local function stroke(obj, color, thickness)
+    return create("UIStroke", {
+        Color = color or Color3.fromRGB(34, 44, 64),
+        Thickness = thickness or 1,
+        Parent = obj,
+    })
+end
+
+local function tween(obj, time, goal, style, dir)
+    local tw = TweenService:Create(
+        obj,
+        TweenInfo.new(time or 0.16, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out),
+        goal
+    )
+    tw:Play()
+    return tw
+end
+
+local function safe(fn, ...)
+    if typeof(fn) == "function" then
+        local ok, err = pcall(fn, ...)
+        if not ok then warn("[UI] callback error:", err) end
+    end
+end
+
+local function toHex(c)
+    return string.format("%02X%02X%02X",
+        math.floor(c.R * 255 + 0.5),
+        math.floor(c.G * 255 + 0.5),
+        math.floor(c.B * 255 + 0.5))
+end
+
+local function makeDraggable(frame, handle)
+    local dragging, dragStart, startPos
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + d.X,
+                startPos.Y.Scale, startPos.Y.Offset + d.Y
+            )
+        end
+    end)
+end
+
+local UI = {}
+UI.__index = UI
+UI.Defaults = {
+    Title = "MY MENU",
+    Subtitle = "C H E A T S",
+    Accent = Color3.fromRGB(0, 190, 80),
+    Spark = Color3.fromRGB(120, 255, 170),
+    Bg = Color3.fromRGB(11, 14, 21),
+    Panel = Color3.fromRGB(16, 20, 30),
+    Element = Color3.fromRGB(24, 30, 44),
+    Hi = Color3.fromRGB(237, 241, 247),
+    Stroke = Color3.fromRGB(34, 44, 64),
+    Text = Color3.fromRGB(234, 239, 246),
+    Sub = Color3.fromRGB(142, 154, 172),
+    Dark = Color3.fromRGB(12, 16, 24),
+    Off = Color3.fromRGB(235, 72, 72),
+    On = Color3.fromRGB(70, 215, 120),
+    Font = Enum.Font.Gotham,
+    FontMed = Enum.Font.GothamMedium,
+    FontBold = Enum.Font.GothamBold,
+    FontTitle = Enum.Font.Bangers,
+    BgImageId = nil,
+    ToggleKey = Enum.KeyCode.RightShift,
+    Width = 340,
+    RowHeight = 32,
+    VisibleRows = 11,
+    ShowToggleBar = true,
+}
+
+function UI:CreateWindow(cfg)
+    local T = table.clone(UI.Defaults)
+    for k, v in pairs(cfg or {}) do T[k] = v end
+
+    local win = setmetatable({
+        T = T,
+        tabs = {},
+        ctrl = { index = 1, rows = {}, rowObjs = {} },
+        current = nil,
+    }, UI)
+
+    local old = getParent():FindFirstChild("CustomUI_" .. T.Title)
+    if old then old:Destroy() end
+
+    local gui = create("ScreenGui", {
+        Name = "CustomUI_" .. T.Title,
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        IgnoreGuiInset = true,
+        DisplayOrder = 200,
+        Parent = getParent(),
+    })
+    win.Gui = gui
+
+    local LIST_H = T.RowHeight * T.VisibleRows
+    local TOTAL_H = 78 + 28 + LIST_H + 28
+
+    local main = create("Frame", {
+        Name = "Menu",
+        Size = UDim2.fromOffset(T.Width, TOTAL_H),
+        Position = UDim2.fromOffset(70, 70),
+        BackgroundColor3 = T.Bg,
+        BackgroundTransparency = 0.28,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Parent = gui,
+    })
+    win.Main = main
+    win.MainStroke = stroke(main, T.Stroke, 1)
+
+    if T.BgImageId then
+        create("ImageLabel", {
+            Name = "Bg",
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://" .. T.BgImageId,
+            ScaleType = Enum.ScaleType.Fit,
+            ImageTransparency = 0.86,
+            Size = UDim2.new(0.84, 0, 0.84, 0),
+            Position = UDim2.new(0.08, 0, 0.08, 0),
+            ZIndex = 0,
+            Parent = main,
+        })
+    end
+
+    local header = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 78),
+        BackgroundColor3 = T.Panel,
+        BackgroundTransparency = 0.22,
+        BorderSizePixel = 0,
+        Parent = main,
+    })
+
+    local title = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = T.Title,
+        Font = T.FontTitle,
+        TextSize = 32,
+        TextColor3 = T.Text,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Bottom,
+        Position = UDim2.new(0, 0, 0, 14),
+        Size = UDim2.new(1, 0, 0, 34),
+        Parent = header,
+    })
+    create("UIGradient", {
+        Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, T.Accent),
+            ColorSequenceKeypoint.new(0.55, T.Text),
+            ColorSequenceKeypoint.new(1, T.Spark),
+        },
+        Rotation = 6,
+        Parent = title,
+    })
+
+    create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = T.Subtitle,
+        Font = T.FontBold,
+        TextSize = 10,
+        TextColor3 = T.Sub,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Position = UDim2.new(0, 0, 0, 52),
+        Size = UDim2.new(1, 0, 0, 12),
+        Parent = header,
+    })
+
+    local hLine = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 2),
+        Position = UDim2.new(0, 0, 1, -2),
+        BackgroundColor3 = T.Accent,
+        BorderSizePixel = 0,
+        Parent = header,
+    })
+    create("UIGradient", {
+        Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, T.Accent),
+            ColorSequenceKeypoint.new(0.5, T.Spark),
+            ColorSequenceKeypoint.new(1, T.Accent),
+        },
+        Parent = hLine,
+    })
+
+    local secBar = create("Frame", {
+        Name = "Section",
+        Size = UDim2.new(1, 0, 0, 28),
+        Position = UDim2.new(0, 0, 0, 78),
+        BackgroundColor3 = T.Accent,
+        BackgroundTransparency = 0.12,
+        BorderSizePixel = 0,
+        Parent = main,
+    })
+    win.SecLabel = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = "MAIN",
+        Font = T.FontTitle,
+        TextSize = 17,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Position = UDim2.new(0, 14, 0, 0),
+        Size = UDim2.new(1, -60, 1, 0),
+        Parent = secBar,
+    })
+    win.Crumb = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = "",
+        Font = T.FontBold,
+        TextSize = 12,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Position = UDim2.new(1, -52, 0, 0),
+        Size = UDim2.new(0, 40, 1, 0),
+        Parent = secBar,
+    })
+
+    win.List = create("ScrollingFrame", {
+        Name = "List",
+        Active = true,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, LIST_H),
+        Position = UDim2.new(0, 0, 0, 106),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollBarThickness = 0,
+        ScrollBarImageColor3 = T.Accent,
+        ScrollBarImageTransparency = 0.4,
+        Parent = main,
+    })
+
+    local footer = create("Frame", {
+        BackgroundColor3 = T.Panel,
+        BackgroundTransparency = 0.22,
+        Position = UDim2.new(0, 0, 1, -28),
+        Size = UDim2.new(1, 0, 0, 28),
+        BorderSizePixel = 0,
+        Parent = main,
+    })
+    win.StatLbl = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = "fps",
+        RichText = true,
+        Font = T.Font,
+        TextSize = 12,
+        TextColor3 = T.Sub,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(0.6, 0, 1, 0),
+        Parent = footer,
+    })
+    win.IndexLbl = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = "0 / 0",
+        Font = T.FontBold,
+        TextSize = 12,
+        TextColor3 = T.Text,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Position = UDim2.new(0.4, 0, 0, 0),
+        Size = UDim2.new(0.6, -12, 1, 0),
+        Parent = footer,
+    })
+
+    makeDraggable(main, header)
+    makeDraggable(main, secBar)
+    makeDraggable(main, main)
+
+    do
+        local frames, acc = 0, 0
+        RunService.RenderStepped:Connect(function(dt)
+            frames += 1
+            acc += dt
+            if acc >= 1 then
+                local fps = frames
+                frames, acc = 0, 0
+                local ping = 0
+                pcall(function() ping = math.floor(LocalPlayer:GetNetworkPing() * 1000) end)
+                local fc = (fps < 25 and T.Off) or (fps < 45 and T.Spark) or T.Accent
+                local pc = (ping >= 150 and T.Off) or (ping >= 80 and T.Spark) or T.Accent
+                win.StatLbl.Text = string.format(
+                    '<font color="#%s">%d fps</font> <font color="#%s">%d ms</font>',
+                    toHex(fc), fps, toHex(pc), ping
+                )
+            end
+        end)
+    end
+
+    if T.ShowToggleBar then
+        local bar = create("Frame", {
+            Name = "Toggle",
+            Size = UDim2.new(0, 152, 0, 30),
+            Position = UDim2.new(0.5, -76, 0, 14),
+            BackgroundColor3 = T.Panel,
+            BackgroundTransparency = 0.1,
+            BorderSizePixel = 0,
+            Parent = gui,
+        })
+        stroke(bar, T.Stroke, 1)
+        create("TextLabel", {
+            BackgroundTransparency = 1,
+            Text = T.Title,
+            Font = T.FontBold,
+            TextSize = 13,
+            TextColor3 = T.Text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Position = UDim2.new(0, 14, 0, 0),
+            Size = UDim2.new(1, -44, 1, 0),
+            Parent = bar,
+        })
+        local dotBtn = create("TextButton", {
+            Text = "",
+            AutoButtonColor = false,
+            BackgroundColor3 = T.Element,
+            Size = UDim2.new(0, 18, 0, 18),
+            Position = UDim2.new(1, -26, 0.5, -9),
+            Parent = bar,
+        })
+        local dot = create("Frame", {
+            BackgroundColor3 = T.Accent,
+            Size = UDim2.new(0, 8, 0, 8),
+            Position = UDim2.new(0.5, -4, 0.5, -4),
+            BorderSizePixel = 0,
+            Parent = dotBtn,
+        })
+        dotBtn.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
+        main:GetPropertyChangedSignal("Visible"):Connect(function()
+            tween(dot, 0.15, { BackgroundColor3 = main.Visible and T.Accent or T.Sub })
+        end)
+        makeDraggable(bar, bar)
+    end
+
+    UserInputService.InputBegan:Connect(function(i, gpe)
+        if gpe then return end
+        if T.ToggleKey and i.KeyCode == T.ToggleKey then
+            main.Visible = not main.Visible
+        end
+    end)
+
+    win.root = { Name = "ROOT", Items = {}, Parent = nil }
+    win.current = win.root
+
+    win:_wireController()
+    win:_render()
+    return win
+end
+
+local function isSelectable(it)
+    return it.type ~= "section" and it.type ~= "label"
+end
+
+function UI:_wireController()
+    local self_ = self
+    local ctrl = self.ctrl
+    local T = self.T
+
+    function ctrl:render() return self_:_render() end
+    function ctrl:updateHL() return self_:_updateHL() end
+    function ctrl:updateFooter() return self_:_updateFooter() end
+    function ctrl:scrollIntoView() return self_:_scrollIntoView() end
+    function ctrl:move(d) return self_:_move(d) end
+    function ctrl:open(p)
+        p.Parent = p.Parent or self_.current
+        self_.current = p
+        self_.ctrl.index = 1
+        self_:_render()
+    end
+    function ctrl:back()
+        if self_.current.Parent then
+            self_.current = self_.current.Parent
+            self_.ctrl.index = 1
+            self_:_render()
+        end
+    end
+    function ctrl:activate() return self_:_activate() end
+    function ctrl:adjust(d) return self_:_adjust(d) end
+
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not self_.Main.Visible then return end
+        if ctrl.listening then
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                local kb = ctrl.listening
+                ctrl.listening = nil
+                kb.key = input.KeyCode
+                safe(kb.cb, input.KeyCode)
+                self_:_render()
+            end
+            return
+        end
+        local k = input.KeyCode
+        if k == Enum.KeyCode.Up then ctrl:move(-1)
+        elseif k == Enum.KeyCode.Down then ctrl:move(1)
+        elseif k == Enum.KeyCode.Return or k == Enum.KeyCode.KeypadEnter then ctrl:activate()
+        elseif k == Enum.KeyCode.Right then ctrl:adjust(1)
+        elseif k == Enum.KeyCode.Left then ctrl:adjust(-1)
+        elseif k == Enum.KeyCode.Backspace then ctrl:back()
+        end
+    end)
+end
+
+function UI:_buildRow(i, it)
+    local T = self.T
+    local y = (i - 1) * T.RowHeight
+    local btn = create("TextButton", {
+        Text = "",
+        AutoButtonColor = false,
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, y),
+        Size = UDim2.new(1, 0, 0, T.RowHeight),
+        Parent = self.List,
+    })
+    local hl = create("Frame", {
+        BackgroundColor3 = T.Hi,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        BorderSizePixel = 0,
+        Parent = btn,
+    })
+    local accent = create("Frame", {
+        Size = UDim2.new(0, 3, 1, 0),
+        BackgroundColor3 = T.Accent,
+        BorderSizePixel = 0,
+        BackgroundTransparency = 1,
+        Parent = btn,
+    })
+
+    if it.type == "section" then
+        create("TextLabel", {
+            BackgroundTransparency = 1,
+            Text = it.text,
+            Font = T.FontBold,
+            TextSize = 12,
+            TextColor3 = T.Spark,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Position = UDim2.new(0, 12, 0, 0),
+            Size = UDim2.new(1, -16, 1, 0),
+            Parent = btn,
+        })
+        return { setSel = function() end }
+    end
+
+    local lx = 14
+    if it.icon then
+        create("ImageLabel", {
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://" .. it.icon,
+            ImageColor3 = T.Sub,
+            Size = UDim2.new(0, 16, 0, 16),
+            Position = UDim2.new(0, 12, 0.5, -8),
+            Parent = btn,
+        })
+        lx = 38
+    end
+    local label = create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = (it.type == "back" and "‹ Back") or it.text,
+        Font = T.FontMed,
+        TextSize = 13,
+        TextColor3 = T.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Position = UDim2.new(0, lx, 0, 0),
+        Size = UDim2.new(1, -lx - 150, 1, 0),
+        Parent = btn,
+    })
+
+    local glyphs = {}
+    local function addGlyph(text, xr, w, col, align, keep)
+        local t = create("TextLabel", {
+            BackgroundTransparency = 1,
+            Text = text,
+            Font = T.FontBold,
+            TextSize = 13,
+            TextColor3 = col,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = align or Enum.TextXAlignment.Center,
+            Position = UDim2.new(1, xr, 0, 0),
+            Size = UDim2.new(0, w, 1, 0),
+            Parent = btn,
+        })
+        glyphs[#glyphs + 1] = { obj = t, normal = col, keep = keep }
+        return t
+    end
+
+    if it.type == "submenu" or it.type == "dropopt" then
+        addGlyph(">", -22, 14, T.Sub)
+    elseif it.type == "toggle" then
+        addGlyph(it.state and "ON" or "OFF", -52, 44, it.state and T.On or T.Off, Enum.TextXAlignment.Right, true)
+    elseif it.type == "dropdown" then
+        addGlyph(tostring(it.options[it.idx] or "-"), -150, 130, T.Spark, Enum.TextXAlignment.Right, true)
+        addGlyph(">", -16, 12, T.Sub)
+    elseif it.type == "slider" then
+        create("TextButton", {
+            Text = "‹",
+            AutoButtonColor = false,
+            BackgroundTransparency = 1,
+            Font = T.FontBold,
+            TextSize = 16,
+            TextColor3 = T.Sub,
+            Position = UDim2.new(1, -86, 0, 0),
+            Size = UDim2.new(0, 18, 1, 0),
+            Parent = btn,
+        }).MouseButton1Click:Connect(function()
+            self.ctrl.index = i
+            self:_updateHL()
+            self:_adjust(-1)
+        end)
+        it._vlab = addGlyph(tostring(it.value), -68, 50, T.Spark)
+        create("TextButton", {
+            Text = "›",
+            AutoButtonColor = false,
+            BackgroundTransparency = 1,
+            Font = T.FontBold,
+            TextSize = 16,
+            TextColor3 = T.Sub,
+            Position = UDim2.new(1, -20, 0, 0),
+            Size = UDim2.new(0, 18, 1, 0),
+            Parent = btn,
+        }).MouseButton1Click:Connect(function()
+            self.ctrl.index = i
+            self:_updateHL()
+            self:_adjust(1)
+        end)
+    elseif it.type == "textbox" then
+        local boxf = create("Frame", {
+            BackgroundColor3 = T.Element,
+            BackgroundTransparency = 0.2,
+            Size = UDim2.new(0, 90, 0, 22),
+            Position = UDim2.new(1, -98, 0.5, -11),
+            BorderSizePixel = 0,
+            Parent = btn,
+        })
+        local tb = create("TextBox", {
+            BackgroundTransparency = 1,
+            Text = it.value or "",
+            PlaceholderText = it.placeholder or "...",
+            PlaceholderColor3 = T.Sub,
+            Font = T.Font,
+            TextSize = 12,
+            TextColor3 = T.Text,
+            Size = UDim2.new(1, -10, 1, 0),
+            Position = UDim2.new(0, 6, 0, 0),
+            ClearTextOnFocus = false,
+            Parent = boxf,
+        })
+        tb.FocusLost:Connect(function(enter)
+            it.value = tb.Text
+            safe(it.cb, tb.Text, enter)
+        end)
+    elseif it.type == "keybind" then
+        addGlyph((self.ctrl.listening == it) and "..." or (it.key and it.key.Name or "None"),
+            -14, 72, T.Spark, Enum.TextXAlignment.Right, true)
+    end
+
+    local function setSel(s)
+        hl.BackgroundTransparency = s and 0 or 1
+        accent.BackgroundTransparency = s and 0 or 1
+        label.TextColor3 = s and T.Dark or T.Text
+        for _, g in ipairs(glyphs) do
+            if not g.keep then
+                g.obj.TextColor3 = s and T.Dark or g.normal
+            end
+        end
+    end
+    setSel(false)
+    if isSelectable(it) then
+        btn.MouseEnter:Connect(function()
+            self.ctrl.index = i
+            self:_updateHL()
+            self:_updateFooter()
+        end)
+        btn.MouseButton1Click:Connect(function()
+            self.ctrl.index = i
+            self:_updateHL()
+            self:_activate()
+        end)
+    end
+    return { setSel = setSel }
+end
+
+function UI:_render()
+    local T = self.T
+    for _, c in ipairs(self.List:GetChildren()) do
+        if c:IsA("GuiButton") then c:Destroy() end
+    end
+    self.SecLabel.Text = self.current.Name
+    self.Crumb.Text = self.current.Parent and "‹ esc" or ""
+
+    local rows = {}
+    if self.current.Parent then rows[#rows + 1] = { type = "back" } end
+    for _, it in ipairs(self.current.Items) do rows[#rows + 1] = it end
+    self.ctrl.rows = rows
+
+    if self.ctrl.index > #rows then self.ctrl.index = #rows end
+    if self.ctrl.index < 1 then self.ctrl.index = 1 end
+    if rows[self.ctrl.index] and not isSelectable(rows[self.ctrl.index]) then
+        for j = 1, #rows do
+            if isSelectable(rows[j]) then
+                self.ctrl.index = j
+                break
+            end
+        end
+    end
+
+    self.ctrl.rowObjs = {}
+    for i, it in ipairs(rows) do
+        self.ctrl.rowObjs[i] = self:_buildRow(i, it)
+    end
+    self.List.CanvasSize = UDim2.new(0, 0, 0, #rows * T.RowHeight)
+    self.List.ScrollBarThickness = (#rows > T.VisibleRows) and 4 or 0
+    self:_updateHL()
+    self:_updateFooter()
+    self:_scrollIntoView()
+end
+
+function UI:_updateHL()
+    for i, o in ipairs(self.ctrl.rowObjs) do o.setSel(i == self.ctrl.index) end
+end
+
+function UI:_updateFooter()
+    self.IndexLbl.Text = string.format("%d / %d", self.ctrl.index, #self.ctrl.rows)
+end
+
+function UI:_scrollIntoView()
+    local T = self.T
+    local LIST_H = T.RowHeight * T.VisibleRows
+    local top = (self.ctrl.index - 1) * T.RowHeight
+    local cp = self.List.CanvasPosition.Y
+    if top < cp then
+        cp = top
+    elseif top + T.RowHeight > cp + LIST_H then
+        cp = top + T.RowHeight - LIST_H
+    end
+    self.List.CanvasPosition = Vector2.new(0, math.max(cp, 0))
+end
+
+function UI:_move(d)
+    local n = #self.ctrl.rows
+    if n == 0 then return end
+    local i = self.ctrl.index
+    for _ = 1, n do
+        i = ((i - 1 + d) % n) + 1
+        if isSelectable(self.ctrl.rows[i]) then break end
+    end
+    self.ctrl.index = i
+    self:_updateHL()
+    self:_updateFooter()
+    self:_scrollIntoView()
+end
+
+function UI:_activate()
+    local it = self.ctrl.rows[self.ctrl.index]
+    if not it then return end
+    if it.type == "back" then
+        self.ctrl:back()
+    elseif it.type == "submenu" then
+        self.ctrl:open(it.target)
+    elseif it.type == "button" then
+        safe(it.cb)
+    elseif it.type == "toggle" then
+        it.state = not it.state
+        safe(it.cb, it.state)
+        self:_render()
+    elseif it.type == "slider" then
+        self:_adjust(1)
+    elseif it.type == "dropdown" then
+        local pg = { Name = it.text:upper(), Parent = self.current, Items = {} }
+        for vi, opt in ipairs(it.options) do
+            pg.Items[#pg.Items + 1] = {
+                type = "dropopt",
+                text = tostring(opt),
+                _drop = it,
+                _vi = vi,
+            }
+        end
+        self.ctrl:open(pg)
+    elseif it.type == "dropopt" then
+        it._drop.idx = it._vi
+        safe(it._drop.cb, it._drop.options[it._vi])
+        self.ctrl:back()
+    elseif it.type == "keybind" then
+        if self.ctrl.listening == it then
+            self.ctrl.listening = nil
+        else
+            self.ctrl.listening = it
+        end
+        self:_render()
+    end
+end
+
+function UI:_adjust(d)
+    local it = self.ctrl.rows[self.ctrl.index]
+    if not it then return end
+    if it.type == "slider" then
+        it.value = math.clamp(it.value + d * it.step, it.min, it.max)
+        if it._vlab then it._vlab.Text = tostring(it.value) end
+        safe(it.cb, it.value)
+    elseif it.type == "submenu" and d > 0 then
+        self.ctrl:open(it.target)
+    end
+end
+
+function UI:AddTab(name, icon, order)
+    local page = { Name = tostring(name):upper(), Items = {}, Parent = self.root }
+    table.insert(self.root.Items, {
+        type = "submenu",
+        text = tostring(name),
+        target = page,
+        icon = icon,
+        order = order or 999,
+    })
+    table.sort(self.root.Items, function(a, b)
+        return (a.order or 999) < (b.order or 999)
+    end)
+    local wrapper = self:_wrapPage(page)
+    table.insert(self.tabs, wrapper)
+    if self.current == self.root then self:_render() end
+    return wrapper
+end
+
+function UI:_wrapPage(page)
+    local wrapper = {}
+    local function add(item)
+        table.insert(page.Items, item)
+        if self.current == page then self:_render() end
+        return item
+    end
+    function wrapper:AddSection(text)
+        add({ type = "section", text = tostring(text) })
+    end
+    function wrapper:AddButton(text, cb)
+        add({ type = "button", text = tostring(text), cb = cb })
+    end
+    function wrapper:AddToggle(text, default, cb)
+        add({ type = "toggle", text = tostring(text), state = default and true or false, cb = cb })
+    end
+    function wrapper:AddSlider(text, min, max, default, cb)
+        local step = math.max(1, math.floor((max - min) / 20 + 0.5))
+        add({
+            type = "slider",
+            text = tostring(text),
+            min = min,
+            max = max,
+            value = math.clamp(default or min, min, max),
+            step = step,
+            cb = cb,
+        })
+    end
+    function wrapper:AddDropdown(text, options, default, cb)
+        local idx = 1
+        for i, o in ipairs(options) do if o == default then idx = i end end
+        local item = add({
+            type = "dropdown",
+            text = tostring(text),
+            options = options,
+            idx = idx,
+            cb = cb,
+        })
+        return function(newOpts)
+            item.options = newOpts or {}
+            if item.idx > #item.options then item.idx = math.max(1, #item.options) end
+            if self.current == page then self:_render() end
+        end
+    end
+    function wrapper:AddTextBox(text, placeholder, cb)
+        local item = add({
+            type = "textbox",
+            text = tostring(text),
+            placeholder = placeholder,
+            value = "",
+            cb = cb,
+        })
+        return function() return item.value end
+    end
+    function wrapper:AddKeybind(text, default, cb)
+        add({ type = "keybind", text = tostring(text), key = default, cb = cb })
+    end
+    function wrapper:AddLabel(text)
+        add({ type = "section", text = tostring(text) })
+    end
+    return wrapper
+end
+
+function UI:Notify(title, text, duration)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration or 3,
+        })
+    end)
+end
+
+return UI

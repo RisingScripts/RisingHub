@@ -1,0 +1,77 @@
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, REST, Routes } = require('discord.js');
+
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds]
+});
+
+client.once(Events.ClientReady, async (c) => {
+    console.log(`✅ Logged in as ${c.user.tag}`);
+
+    const commands = [
+        {
+            name: 'panel',
+            description: 'Spawns the account generator panel',
+        },
+    ];
+
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+    try {
+        await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
+        console.log('✅ Successfully registered /panel command.');
+    } catch (error) {
+        console.error(error);
+    }
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+    
+    if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === 'panel') {
+            
+            const embed = new EmbedBuilder()
+                .setColor('#2b2d31') 
+                .setTitle('Limits & Access')
+                .setDescription(
+                    '```\n' +
+                    'STANDARD      1 account / 24h\n' +
+                    'PREMIUM       1 account / 5m   • Premium Access\n' +
+                    'BULK          10-150 accounts / 2d • Bulk Access\n' +
+                    '```\n' +
+                    'Premium: `Premium` • Bulk: `Bulk Gen`\n\n' +
+                    '**How It Works**\n' +
+                    '1. Choose a generator below\n' +
+                    '2. Your account is delivered privately to your DMs\n' +
+                    '3. Stock updates automatically after every generation'
+                )
+                .setFooter({ text: 'JXV • Live Stock • Private Delivery' });
+
+            const standardBtn = new ButtonBuilder().setCustomId('btn_standard').setLabel('Generate Standard').setEmoji('⚡').setStyle(ButtonStyle.Primary); 
+            const premiumBtn = new ButtonBuilder().setCustomId('btn_premium').setLabel('Generate Premium').setEmoji('💎').setStyle(ButtonStyle.Primary); 
+            const bulkBtn = new ButtonBuilder().setCustomId('btn_bulk').setLabel('Bulk Generate').setEmoji('📦').setStyle(ButtonStyle.Secondary); 
+            const storeBtn = new ButtonBuilder().setLabel('Visit Store').setEmoji('🛒').setStyle(ButtonStyle.Link).setURL('https://your-store-link-here.com'); // Replace this link!
+
+            const row1 = new ActionRowBuilder().addComponents(standardBtn, premiumBtn);
+            const row2 = new ActionRowBuilder().addComponents(bulkBtn, storeBtn);
+
+            await interaction.reply({
+                embeds: [embed],
+                components: [row1, row2]
+            });
+        }
+    }
+
+    if (interaction.isButton()) {
+        if (interaction.customId === 'btn_standard') {
+            await interaction.reply({ content: '⚡ Generating a **Standard** account...', ephemeral: true });
+        }
+        if (interaction.customId === 'btn_premium') {
+            await interaction.reply({ content: '💎 Generating a **Premium** account...', ephemeral: true });
+        }
+        if (interaction.customId === 'btn_bulk') {
+            await interaction.reply({ content: '📦 Starting **Bulk** generation...', ephemeral: true });
+        }
+    }
+});
+
+client.login(process.env.TOKEN);
